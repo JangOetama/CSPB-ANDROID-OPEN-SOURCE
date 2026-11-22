@@ -1,0 +1,37 @@
+name: Cek tabel fungsi engine vs server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fnptr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil source
+        run: |
+          git clone --recursive --depth 1 https://github.com/ZacharyLester/CSMoE-Android zl
+          git clone --depth 1 https://github.com/3dcakecookiesku-del/CSPB-ANDROID-OPEN-SOURCE cspb
+
+      - name: Bandingkan tabel fungsi
+        run: |
+          : > fnptr.txt
+          for name in DLL_FUNCTIONS NEW_DLL_FUNCTIONS enginefuncs_t; do
+            for root in zl cspb; do
+              echo "== $name ($root)" >> fnptr.txt
+              for f in $(grep -rl --include=*.h "} $name;\|} *$name;" $root | grep -v '/.git/'); do
+                awk -v n="$name" '
+                  $0 ~ "} *"n" *;" {print FILENAME": selesai, "cnt" pointer fungsi"; inside=0}
+                  inside && /\(\*/ {cnt++; print "   " $0}
+                  $0 ~ "typedef struct" && !inside {inside=1; cnt=0}
+                ' "$f" >> fnptr.txt
+              done
+            done
+          done
+          cat fnptr.txt
+
+      - name: Simpan hasil
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fnptr-hasil
+          path: fnptr.txt
