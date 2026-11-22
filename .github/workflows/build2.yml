@@ -1,0 +1,59 @@
+name: Build CSPB arm64 v2 (fix pfnShouldCollide)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch untuk arm64 dan fungsi NULL
+        run: |
+          cat > jni/Application.mk <<'EOF'
+          APP_ABI := arm64-v8a
+          APP_PLATFORM := android-21
+          APP_STL := c++_static
+          APP_CPPFLAGS += -frtti -fexceptions
+          EOF
+
+          cat > jni/xash_config.mk <<'EOF'
+          LOCAL_CFLAGS += -w -fPIC -fsigned-char -DLINUX -D_LINUX -fno-strict-aliasing
+          LOCAL_CPPFLAGS += -fpermissive -Wno-narrowing -Wno-c++11-narrowing
+          LOCAL_LDLIBS += -llog
+          EOF
+
+          sed -i 's/#ifdef __x86_64__/#if defined(__x86_64__) || defined(__aarch64__)/' jni/public/archtypes.h
+          sed -i 's/(int)&(((t \*)0)->m)/(size_t)\&(((t *)0)->m)/' jni/engine/physint.h
+
+          python3 - <<'PY'
+          p='jni/dlls/cbase.cpp'
+          s=open(p,encoding='utf8',errors='ignore').read().replace('\r\n','\n')
+          old="NEW_DLL_FUNCTIONS gNewDLLFunctions =\n{\n\tOnFreeEntPrivateData,\n\tnullptr,\n\tnullptr,\n\tnullptr,\n\tnullptr\n};"
+          assert s.count(old)==1, 'pola tabel tidak ketemu'
+          new=("void GameShutdownStub(void) {}\n"
+               "int ShouldCollideStub(edict_t *pentTouched, edict_t *pentOther) { return 1; }\n"
+               "NEW_DLL_FUNCTIONS gNewDLLFunctions =\n{\n\tOnFreeEntPrivateData,\n\tGameShutdownStub,\n\tShouldCollideStub,\n\tnullptr,\n\tnullptr\n};")
+          open(p,'w',encoding='utf8').write(s.replace(old,new))
+          print('cbase.cpp patched')
+          PY
+
+      - name: Build libclient dan libserver (arm64)
+        run: |
+          set -o pipefail
+          $ANDROID_NDK_HOME/ndk-build \
+            NDK_PROJECT_PATH=$PWD \
+            APP_BUILD_SCRIPT=$PWD/jni/Android.mk \
+            NDK_APPLICATION_MK=$PWD/jni/Application.mk \
+            XASH3D_CONFIG=$PWD/jni/xash_config.mk \
+            -j$(nproc) 2>&1 | tee build.log
+
+      - name: Simpan hasil
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cspb-arm64-v2
+          path: |
+            libs/
+            build.log
