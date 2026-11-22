@@ -1,0 +1,54 @@
+name: Cek layout v2 (Xash3D vs server)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil source
+        run: |
+          git clone --depth 1 --recurse-submodules https://github.com/ZacharyLester/CSMoE-Android zl
+          git clone --depth 1 https://github.com/3dcakecookiesku-del/CSPB-ANDROID-OPEN-SOURCE cspb
+
+      - name: Cari root header engine dan server
+        run: |
+          ENGH=$(find zl -path '*/engine/progdefs.h' -not -path '*/.git/*' | head -1)
+          SRVH=$(find cspb -path '*/engine/progdefs.h' -not -path '*/.git/*' | head -1)
+          echo "engine progdefs: $ENGH" > roots.txt
+          echo "server progdefs: $SRVH" >> roots.txt
+          cat roots.txt
+          echo "ENG_ROOT=$(dirname $(dirname "$ENGH"))" >> $GITHUB_ENV
+          echo "SRV_ROOT=$(dirname $(dirname "$SRVH"))" >> $GITHUB_ENV
+
+      - name: Cetak ukuran struct
+        run: |
+          cat > sz.cpp <<'EOF'
+          #include <stdio.h>
+          #include <stddef.h>
+          #include "common/const.h"
+          #include "common/mathlib.h"
+          #include "engine/progdefs.h"
+          #include "engine/edict.h"
+          int main(){
+            printf("edict=%zu entvars=%zu v_off=%zu string_t=%zu\n",
+              sizeof(edict_t), sizeof(entvars_t), offsetof(edict_t,v), sizeof(string_t));
+          }
+          EOF
+          {
+            for name in ENG SRV; do
+              root=$(printenv ${name}_ROOT)
+              echo "== $name ($root)"
+              g++ -m64 -w -I"$root" -I"$root/engine" -I"$root/common" -I"$root/public" -DLINUX -DX64BITS sz.cpp -o sz_$name 2>&1 | head -8 && ./sz_$name || echo "gagal compile $name"
+            done
+          } | tee layout.txt
+
+      - name: Simpan hasil
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layout-v2
+          path: |
+            layout.txt
+            roots.txt
