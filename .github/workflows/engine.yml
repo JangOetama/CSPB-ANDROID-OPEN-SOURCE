@@ -1,0 +1,45 @@
+name: Build Engine arm64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil source engine dan menu
+        run: |
+          git clone --recursive --depth 1 https://github.com/BillFlx/CSMoE-Android eng || true
+          git clone --recursive --depth 1 https://github.com/MoeMod/mainui_cpp menu || true
+          git clone --recursive --depth 1 https://github.com/MoeMod/CSMoE csmoe || true
+          find eng menu csmoe -maxdepth 4 -not -path '*/.git*' > tree.txt 2>&1 || true
+          find eng menu csmoe \( -name Application.mk -o -name Android.mk -o -name CMakeLists.txt -o -name build.gradle \) -not -path '*/.git*' > files.txt 2>&1 || true
+
+      - name: Coba build arm64
+        run: |
+          : > engine.log
+          for mk in $(find eng csmoe menu -name Application.mk -not -path '*/.git*' | head -8); do
+            d=$(dirname "$mk")
+            [ -f "$d/Android.mk" ] || continue
+            proj=$(dirname "$d")
+            echo "=== BUILD $mk" | tee -a engine.log
+            $ANDROID_NDK_HOME/ndk-build \
+              NDK_PROJECT_PATH=$PWD/$proj \
+              APP_BUILD_SCRIPT=$PWD/$d/Android.mk \
+              NDK_APPLICATION_MK=$PWD/$mk \
+              APP_ABI=arm64-v8a APP_PLATFORM=android-21 \
+              -j$(nproc) 2>&1 | tee -a engine.log || true
+          done
+          mkdir -p out
+          find eng csmoe menu -path '*arm64-v8a*' -name '*.so' -exec cp --parents {} out/ \; || true
+
+      - name: Simpan hasil
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-arm64-hasil
+          path: |
+            out/
+            tree.txt
+            files.txt
+            engine.log

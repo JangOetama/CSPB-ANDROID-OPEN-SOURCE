@@ -1,0 +1,49 @@
+name: Build Engine arm64 v3
+
+on:
+  workflow_dispatch:
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil source engine
+        run: |
+          git clone --recursive --depth 1 https://github.com/BillFlx/CSMoE-Android eng
+          cat eng/app/src/main/jni/xash3d_config.mk > struktur.txt 2>&1 || true
+
+      - name: Buang flag khusus GCC / ARM 32-bit
+        run: |
+          cd eng/app/src/main/jni
+          sed -i -e 's/-fgraphite-identity//g' -e 's/-floop-interchange//g' -e 's/-funsafe-loop-optimizations//g' -e 's/-mvectorize-with-neon-quad//g' -e 's/-mfpu=neon//g' -e 's/-mcpu=cortex-a9//g' -e 's/-mthumb//g' -e 's/-finline-limit=256//g' Application.mk xash3d_config.mk
+
+      - name: Build arm64 (xash, menu, NanoGL)
+        run: |
+          cd eng/app/src/main
+          $ANDROID_NDK_HOME/ndk-build -k \
+            NDK_PROJECT_PATH=$PWD \
+            APP_BUILD_SCRIPT=$PWD/jni/Android.mk \
+            NDK_APPLICATION_MK=$PWD/jni/Application.mk \
+            APP_ABI=arm64-v8a \
+            APP_PLATFORM=android-21 \
+            APP_STL=c++_static \
+            APP_ALLOW_MISSING_DEPS=true \
+            "APP_MODULES=xash menu NanoGL" \
+            -j$(nproc) > $GITHUB_WORKSPACE/engine3.log 2>&1 || true
+          cd $GITHUB_WORKSPACE
+          grep -E "error:|\*\*\*|undefined reference" engine3.log | head -150 > errors.txt || true
+          mkdir -p out
+          find eng -path '*arm64-v8a*' -name '*.so' -exec cp --parents {} out/ \; || true
+          find out -type f > hasil.txt || true
+
+      - name: Simpan hasil
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine3-hasil
+          path: |
+            out/
+            hasil.txt
+            errors.txt
+            struktur.txt
+            engine3.log

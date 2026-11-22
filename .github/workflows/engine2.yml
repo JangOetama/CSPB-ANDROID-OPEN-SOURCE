@@ -1,0 +1,44 @@
+name: Build Engine arm64 v2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil source engine
+        run: |
+          git clone --recursive --depth 1 https://github.com/BillFlx/CSMoE-Android eng
+          ls eng/app/src/main/jni eng/app/src/main/jni/src/Xash3D > struktur.txt 2>&1 || true
+          cat eng/app/src/main/jni/Application.mk eng/app/src/main/jni/Android.mk >> struktur.txt 2>&1 || true
+
+      - name: Build arm64
+        run: |
+          cd eng/app/src/main
+          $ANDROID_NDK_HOME/ndk-build -k \
+            NDK_PROJECT_PATH=$PWD \
+            APP_BUILD_SCRIPT=$PWD/jni/Android.mk \
+            NDK_APPLICATION_MK=$PWD/jni/Application.mk \
+            APP_ABI=arm64-v8a \
+            APP_PLATFORM=android-21 \
+            APP_STL=c++_static \
+            APP_ALLOW_MISSING_DEPS=true \
+            -j$(nproc) > $GITHUB_WORKSPACE/engine2.log 2>&1 || true
+          cd $GITHUB_WORKSPACE
+          grep -E "error:|\*\*\*|undefined" engine2.log | head -150 > errors.txt || true
+          mkdir -p out
+          find eng -path '*arm64-v8a*' -name '*.so' -exec cp --parents {} out/ \; || true
+          find out -type f > hasil.txt || true
+
+      - name: Simpan hasil
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine2-hasil
+          path: |
+            out/
+            hasil.txt
+            errors.txt
+            struktur.txt
+            engine2.log
