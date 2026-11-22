@@ -1,0 +1,30 @@
+name: Cek layout struct engine vs server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil source
+        run: |
+          git clone --depth 1 https://github.com/BillFlx/CSMoE-Android eng
+          git clone --depth 1 https://github.com/3dcakecookiesku-del/CSPB-ANDROID-OPEN-SOURCE cspb || git clone --depth 1 https://github.com/JangOetama/CSPB-ANDROID-OPEN-SOURCE cspb
+
+      - name: Cari header engine dan server
+        run: |
+          find eng cspb -name edict.h -not -path '*/.git/*' > headers.txt
+          find eng cspb -name progdefs.h -not -path '*/.git/*' >> headers.txt
+          find eng cspb -name const.h -not -path '*/.git/*' >> headers.txt
+          cat headers.txt
+
+      - name: Cetak ukuran struct
+        run: |
+          cat > sz.cpp <<'EOF'
+          #include <stdio.h>
+          #include <stddef.h>
+          #include "common/const.h"
+          #include "common/mathlib.h"
+          #include "engine/progdefs.h"
+          #include "engine/ed
